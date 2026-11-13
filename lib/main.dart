@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
+// ⚠️ 记得这里换成你部署的 Cloudflare Worker 地址
 const String workerUrl = 'https://REPLACE-ME.workers.dev';
 const String appToken = 'change-me';
 
@@ -33,13 +34,12 @@ class PracticePage extends StatefulWidget {
 
 class _PracticePageState extends State<PracticePage> {
   final FlutterTts _tts = FlutterTts();
-  final AudioRecorder _recorder = AudioRecorder();
+  final Record _recorder = Record();
 
   bool _recording = false;
   bool _loading = false;
   String? _recordPath;
   
-  // 评测结果相关
   int? _score;
   List<dynamic> _wordResults = [];
   List<dynamic> _tips = [];
@@ -90,31 +90,23 @@ class _PracticePageState extends State<PracticePage> {
       return;
     }
 
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
+    if (await _recorder.hasPermission()) {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
+
+      // 4.4.0 版本的极简调用
+      await _recorder.start(path: path);
+
+      setState(() {
+        _recording = true;
+        _score = null;
+        _wordResults.clear();
+        _tips.clear();
+        _errorMsg = null;
+      });
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('没有麦克风权限')));
-      return;
     }
-
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
-
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.wav,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
-      path: path,
-    );
-
-    setState(() {
-      _recording = true;
-      _score = null;
-      _wordResults.clear();
-      _tips.clear();
-      _errorMsg = null;
-    });
   }
 
   Future<void> _uploadAndEvaluate() async {
@@ -181,7 +173,7 @@ class _PracticePageState extends State<PracticePage> {
       return Text(_errorMsg!, style: const TextStyle(color: Colors.red));
     }
     if (_score == null) {
-      return const Text('请先录音，然后点击“评测发音”', style: TextStyle(color: Colors.grey));
+      return const Text('请先录音，然后点击“获取发音评测”', style: TextStyle(color: Colors.grey));
     }
 
     return Container(
