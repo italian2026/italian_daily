@@ -11,17 +11,10 @@ jobs:
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.19.6'
           channel: stable
           cache: true
       - run: flutter create --platforms=android .
-      - name: Install NDK and Fix SDK
-        run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;25.1.8937393" || true
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' android/app/build.gradle || true
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/' android/app/build.gradle || true
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' android/app/build.gradle.kts || true
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/' android/app/build.gradle.kts || true
       - run: flutter pub get
       - run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
