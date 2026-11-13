@@ -36,8 +36,14 @@ class _PracticePageState extends State<PracticePage> {
   final AudioRecorder _recorder = AudioRecorder();
 
   bool _recording = false;
+  bool _loading = false;
   String? _recordPath;
-  String _result = 'Waiting for record...';
+  
+  // 评测结果相关
+  int? _score;
+  List<dynamic> _wordResults = [];
+  List<dynamic> _tips = [];
+  String? _errorMsg;
 
   final List<String> _sentences = [
     'Chi va piano va sano e va lontano.',
@@ -65,7 +71,7 @@ class _PracticePageState extends State<PracticePage> {
       await _tts.setLanguage('it-IT');
       await _tts.setSpeechRate(0.45);
     } catch (e) {
-      setState(() => _result = 'TTS error: $e');
+      debugPrint('TTS error: $e');
     }
   }
 
@@ -80,14 +86,13 @@ class _PracticePageState extends State<PracticePage> {
       setState(() {
         _recording = false;
         _recordPath = path;
-        _result = path == null ? 'Record failed' : 'Record done. Tap Upload.';
       });
       return;
     }
 
     final hasPermission = await _recorder.hasPermission();
     if (!hasPermission) {
-      setState(() => _result = 'No microphone permission.');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('没有麦克风权限')));
       return;
     }
 
@@ -105,15 +110,20 @@ class _PracticePageState extends State<PracticePage> {
 
     setState(() {
       _recording = true;
-      _result = 'Recording... Tap stop.';
+      _score = null;
+      _wordResults.clear();
+      _tips.clear();
+      _errorMsg = null;
     });
   }
 
-  Future<void> _upload() async {
-    if (_recordPath == null) {
-      setState(() => _result = 'No record found.');
-      return;
-    }
+  Future<void> _uploadAndEvaluate() async {
+    if (_recordPath == null) return;
+
+    setState(() {
+      _loading = true;
+      _errorMsg = null;
+    });
 
     final bytes = await File(_recordPath!).readAsBytes();
     final body = jsonEncode({
@@ -123,7 +133,6 @@ class _PracticePageState extends State<PracticePage> {
     });
 
     try {
-      setState(() => _result = 'Uploading...');
       final resp = await http
           .post(
             Uri.parse(workerUrl),
@@ -135,9 +144,25 @@ class _PracticePageState extends State<PracticePage> {
           )
           .timeout(const Duration(seconds: 30));
 
-      setState(() => _result = 'HTTP ${resp.statusCode}\n\n${resp.body}');
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        setState(() {
+          _score = data['score'];
+          _wordResults = data['words'] ?? [];
+          _tips = data['tips'] ?? [];
+          _loading = false;
+        });
+      } else {
+        setState(() {
+          _errorMsg = '服务器返回错误: ${resp.statusCode}';
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() => _result = 'Upload failed: $e');
+      setState(() {
+        _errorMsg = '网络错误: $e';
+        _loading = false;
+      });
     }
   }
 
@@ -146,6 +171,79 @@ class _PracticePageState extends State<PracticePage> {
     _recorder.dispose();
     _tts.stop();
     super.dispose();
+  }
+
+  Widget _buildResultArea() {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_errorMsg != null) {
+      return Text(_errorMsg!, style: const TextStyle(color: Colors.red));
+    }
+    if (_score == null) {
+      return const Text('请先录音，然后点击“评测发音”', style: TextStyle(color: Colors.grey));
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey[300]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('发音得分', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                '$_score 分',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: _score! >= 80 ? Colors.green : (_score! >= 60 ? Colors.orange : Colors.red),
+                ),
+              ),
+            ],
+          ),
+          const Divider(),
+          if (_wordResults.isNotEmpty) ...[
+            const Text('逐词分析:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _wordResults.map((w) {
+                final bool ok = w['ok'] ?? true;
+                return Chip(
+                  label: Text(w['word'] ?? ''),
+                  backgroundColor: ok ? Colors.green[100] : Colors.red[100],
+                  labelStyle: TextStyle(color: ok ? Colors.green[800] : Colors.red[800]),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (_tips.isNotEmpty) ...[
+            const Text('改进建议:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ..._tips.map((tip) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(tip, style: const TextStyle(fontSize: 14))),
+                    ],
+                  ),
+                )),
+          ]
+        ],
+      ),
+    );
   }
 
   @override
@@ -157,34 +255,40 @@ class _PracticePageState extends State<PracticePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 12),
             Text(
               _today,
               style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _speak,
-              icon: const Icon(Icons.volume_up),
-              label: const Text('Play Audio'),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _speak,
+                  icon: const Icon(Icons.volume_up),
+                  label: const Text('听范读'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _toggleRecord,
+                  icon: Icon(_recording ? Icons.stop : Icons.mic),
+                  label: Text(_recording ? '停止' : '录音'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _recording ? Colors.red[100] : null,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _toggleRecord,
-              icon: Icon(_recording ? Icons.stop : Icons.mic),
-              label: Text(_recording ? 'Stop Record' : 'Start Record'),
+            ElevatedButton(
+              onPressed: _recordPath != null && !_recording && !_loading ? _uploadAndEvaluate : null,
+              child: const Text('获取发音评测'),
             ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: _upload,
-              icon: const Icon(Icons.cloud_upload),
-              label: const Text('Upload'),
-            ),
-            const SizedBox(height: 24),
-            const Text('Result:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
+            const SizedBox(height: 20),
             Expanded(
-              child: SingleChildScrollView(child: Text(_result)),
+              child: SingleChildScrollView(
+                child: _buildResultArea(),
+              ),
             ),
           ],
         ),
