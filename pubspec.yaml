@@ -9,10 +9,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_tts: ^4.2.0
-  record: ^5.1.2
-  path_provider: ^2.1.4
-  http: ^1.2.2
+  flutter_tts: ^3.8.5
+  record: ^5.0.4
+  path_provider: ^2.1.2
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:
