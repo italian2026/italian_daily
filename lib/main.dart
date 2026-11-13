@@ -33,7 +33,7 @@ class PracticePage extends StatefulWidget {
 
 class _PracticePageState extends State<PracticePage> {
   final FlutterTts _tts = FlutterTts();
-  final AudioRecorder _recorder = AudioRecorder();
+  final Record _recorder = Record();
 
   bool _recording = false;
   String? _recordPath;
@@ -85,28 +85,19 @@ class _PracticePageState extends State<PracticePage> {
       return;
     }
 
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
+    if (await _recorder.hasPermission()) {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
+
+      await _recorder.start(path: path);
+
+      setState(() {
+        _recording = true;
+        _result = 'Recording... Tap stop.';
+      });
+    } else {
       setState(() => _result = 'No microphone permission.');
-      return;
     }
-
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
-
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.wav,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
-      path: path,
-    );
-
-    setState(() {
-      _recording = true;
-      _result = 'Recording... Tap stop.';
-    });
   }
 
   Future<void> _upload() async {
