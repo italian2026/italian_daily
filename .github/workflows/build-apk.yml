@@ -11,19 +11,17 @@ jobs:
           java-version: '17'
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.22.0'
           channel: stable
           cache: true
       - run: flutter create --platforms=android .
-      - name: 添加麦克风和网络权限
+      - name: Fix Gradle and SDK
         run: |
-          python3 -c "
-          p = 'android/app/src/main/AndroidManifest.xml'
-          s = open(p).read()
-          extra = '<uses-permission android:name=\"android.permission.RECORD_AUDIO\"/>\n<uses-permission android:name=\"android.permission.INTERNET\"/>'
-          s = s.replace('<application', extra + '\n<application', 1)
-          open(p, 'w').write(s)
-          "
+          sed -i 's/ext.kotlin_version = .*/ext.kotlin_version = "1.9.0"/' android/build.gradle || true
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 23/' android/app/build.gradle || true
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 34/' android/app/build.gradle || true
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' android/app/build.gradle.kts || true
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 34/' android/app/build.gradle.kts || true
       - run: flutter pub get
       - run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
