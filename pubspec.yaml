@@ -1,5 +1,5 @@
 name: italian_daily
-description: Daily Italian sentence with recording and cloud evaluation.
+description: A simple Italian daily app.
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -9,10 +9,6 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_tts: ^3.8.5
-  record: ^5.0.4
-  path_provider: ^2.1.2
-  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:
