@@ -33,21 +33,21 @@ class PracticePage extends StatefulWidget {
 
 class _PracticePageState extends State<PracticePage> {
   final FlutterTts _tts = FlutterTts();
-  final Record _recorder = Record();
+  final AudioRecorder _recorder = AudioRecorder();
 
   bool _recording = false;
   String? _recordPath;
-  String _result = '等待录音';
+  String _result = 'Waiting for record...';
 
-  final List<Map<String, String>> _sentences = [
-    {'it': 'Chi va piano va sano e va lontano.', 'zh': '慢走走得稳，走得远。'},
-    {'it': 'Meglio tardi che mai.', 'zh': '迟做总比不做好。'},
-    {'it': 'Buongiorno!', 'zh': '早上好！'},
-    {'it': 'In bocca al lupo!', 'zh': '祝你好运！'},
-    {'it': 'Mamma mia!', 'zh': '我的天哪！'},
+  final List<String> _sentences = [
+    'Chi va piano va sano e va lontano.',
+    'Meglio tardi che mai.',
+    'Buongiorno!',
+    'In bocca al lupo!',
+    'Mamma mia!',
   ];
 
-  Map<String, String> get _today {
+  String get _today {
     final now = DateTime.now();
     final start = DateTime(now.year, 1, 1);
     final index = now.difference(start).inDays % _sentences.length;
@@ -65,13 +65,13 @@ class _PracticePageState extends State<PracticePage> {
       await _tts.setLanguage('it-IT');
       await _tts.setSpeechRate(0.45);
     } catch (e) {
-      setState(() => _result = 'TTS 初始化失败：$e');
+      setState(() => _result = 'TTS error: $e');
     }
   }
 
   Future<void> _speak() async {
     await _tts.stop();
-    await _tts.speak(_today['it']!);
+    await _tts.speak(_today);
   }
 
   Future<void> _toggleRecord() async {
@@ -80,41 +80,50 @@ class _PracticePageState extends State<PracticePage> {
       setState(() {
         _recording = false;
         _recordPath = path;
-        _result = path == null ? '录音失败' : '录音完成，点“上传评测”';
+        _result = path == null ? 'Record failed' : 'Record done. Tap Upload.';
       });
       return;
     }
 
-    if (await _recorder.hasPermission()) {
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
-
-      await _recorder.start(path: path);
-
-      setState(() {
-        _recording = true;
-        _result = '录音中……再点一次停止';
-      });
-    } else {
-      setState(() => _result = '没有麦克风权限，请到设置里允许录音');
+    final hasPermission = await _recorder.hasPermission();
+    if (!hasPermission) {
+      setState(() => _result = 'No microphone permission.');
+      return;
     }
+
+    final dir = await getTemporaryDirectory();
+    final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
+
+    await _recorder.start(
+      const RecordConfig(
+        encoder: AudioEncoder.wav,
+        sampleRate: 16000,
+        numChannels: 1,
+      ),
+      path: path,
+    );
+
+    setState(() {
+      _recording = true;
+      _result = 'Recording... Tap stop.';
+    });
   }
 
   Future<void> _upload() async {
     if (_recordPath == null) {
-      setState(() => _result = '还没有录音');
+      setState(() => _result = 'No record found.');
       return;
     }
 
     final bytes = await File(_recordPath!).readAsBytes();
     final body = jsonEncode({
-      'text': _today['it'],
+      'text': _today,
       'language': 'it-IT',
       'audio_base64': base64Encode(bytes),
     });
 
     try {
-      setState(() => _result = '上传中……');
+      setState(() => _result = 'Uploading...');
       final resp = await http
           .post(
             Uri.parse(workerUrl),
@@ -128,7 +137,7 @@ class _PracticePageState extends State<PracticePage> {
 
       setState(() => _result = 'HTTP ${resp.statusCode}\n\n${resp.body}');
     } catch (e) {
-      setState(() => _result = '上传失败：$e');
+      setState(() => _result = 'Upload failed: $e');
     }
   }
 
@@ -150,34 +159,29 @@ class _PracticePageState extends State<PracticePage> {
           children: [
             const SizedBox(height: 12),
             Text(
-              _today['it']!,
+              _today,
               style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _today['zh']!,
-              style: const TextStyle(fontSize: 16, color: Colors.black54),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _speak,
               icon: const Icon(Icons.volume_up),
-              label: const Text('播放意大利语范读'),
+              label: const Text('Play Audio'),
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: _toggleRecord,
               icon: Icon(_recording ? Icons.stop : Icons.mic),
-              label: Text(_recording ? '停止录音' : '开始录音'),
+              label: Text(_recording ? 'Stop Record' : 'Start Record'),
             ),
             const SizedBox(height: 12),
             ElevatedButton.icon(
               onPressed: _upload,
               icon: const Icon(Icons.cloud_upload),
-              label: const Text('上传评测'),
+              label: const Text('Upload'),
             ),
             const SizedBox(height: 24),
-            const Text('结果：', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Result:', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Expanded(
               child: SingleChildScrollView(child: Text(_result)),
