@@ -33,7 +33,7 @@ class PracticePage extends StatefulWidget {
 
 class _PracticePageState extends State<PracticePage> {
   final FlutterTts _tts = FlutterTts();
-  final AudioRecorder _recorder = AudioRecorder();
+  final Record _recorder = Record();
 
   bool _recording = false;
   String? _recordPath;
@@ -64,8 +64,6 @@ class _PracticePageState extends State<PracticePage> {
     try {
       await _tts.setLanguage('it-IT');
       await _tts.setSpeechRate(0.45);
-      await _tts.setPitch(1.0);
-      await _tts.setVolume(1.0);
     } catch (e) {
       setState(() => _result = 'TTS 初始化失败：$e');
     }
@@ -87,28 +85,19 @@ class _PracticePageState extends State<PracticePage> {
       return;
     }
 
-    final hasPermission = await _recorder.hasPermission();
-    if (!hasPermission) {
+    if (await _recorder.hasPermission()) {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
+
+      await _recorder.start(path: path);
+
+      setState(() {
+        _recording = true;
+        _result = '录音中……再点一次停止';
+      });
+    } else {
       setState(() => _result = '没有麦克风权限，请到设置里允许录音');
-      return;
     }
-
-    final dir = await getTemporaryDirectory();
-    final path = '${dir.path}/record_${DateTime.now().millisecondsSinceEpoch}.wav';
-
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.wav,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
-      path: path,
-    );
-
-    setState(() {
-      _recording = true;
-      _result = '录音中……再点一次停止';
-    });
   }
 
   Future<void> _upload() async {
