@@ -7,9 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
-// 部署 Worker 后回来替换这个地址
 const String workerUrl = 'https://REPLACE-ME.workers.dev';
-// 第一轮先保持 change-me，和 Worker 默认值一致
 const String appToken = 'change-me';
 
 void main() => runApp(const ItalianDailyApp());
